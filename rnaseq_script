@@ -1,0 +1,28 @@
+#!/bin/bash
+#As this script uses many cores, always use nice -n 19 when you run it!
+#all file paths here are set relative to /local/data/public/turro_group/DES
+#Also, it uses already unzipped files
+ 
+#first create the bowtie reference
+../bowtie-1.2.2-linux-x86_64/bowtie-build -o 3 Mouse_ensembl Mouse_ensembl_ebwt
+
+#This loop runs TrimGalore, Bowtie, Samtools, bam2hits and mmseq.
+for f in *.fastq
+do
+#Trim fastq reads. Adjust --path_to_cutadapt for yourself
+../TrimGalore-0.4.5/trim_galore -q 20 --stringency 3 -e 0.05 --length 36 --path_to_cutadapt /home/pk462/.local/bin/ $f
+
+#run Bowtie. setting as used by Turro in his github. -p 16 means that 16 cores will be used, can be changes
+#samtools view converts alignments into BAM files and samtools sort sorts them by name. Stores them in
+#.namesorted file
+#the single - used in samtools view and samtools sort is a bit confusing, but basically its a file name carried from 
+#previous commands. I don't understand it fully, it is coppied from turro's github.
+../bowtie-1.2.2-linux-x86_64/bowtie -a --best --strata -S -m 100 --chunkmbs 256 -p 16 Mus_Musculus/Mouse_ensembl_ebwt $f |\
+samtools view -F -b -S - | samtools sort -n - $f.namesorted
+
+#bam2hits maps the alignments in BAM format to the reference transcript and stores them in .hits file 
+../mmseq-latest/bin/bam2hits Mus_Musculus/mouse_ensembl $f.namesorted.bam >$f.hits
+
+#run mmseq
+../mmseq-latest/bin/mmseq $f.hits $f.quant 
+done
